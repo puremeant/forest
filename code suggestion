@@ -1,0 +1,729 @@
+응, 가능해. 다만 **이 GitHub 레포 기준으로는 “원논문 AP Pruning stability”가 아니라 “replication 코드의 AP Tree leaf/split stability”를 보는 것**으로 시작하는 게 맞아. README에 따르면 이 레포는 원논문과 다르게 **Elastic Net/mean shrinkage 대신 Ridge를 쓰고, AP Tree에서 intermediate nodes가 아니라 final nodes만 test assets로 쓰는 단순화**를 했다고 적혀 있어. ([GitHub][1])
+
+그래도 네가 말한 질문:
+
+> 기간을 바꾸면 selected characteristic / split order가 바뀌는가?
+
+이건 충분히 돌려볼 수 있어. 이 레포는 `main.py`에서 `test_multiple_periods(...)`를 여러 depth, factor model, characteristic 조합으로 반복 실행하는 구조라서 여기에 **tree metadata 저장 기능**을 붙이면 돼. ([GitHub][2])
+
+---
+
+# 1. 우리가 추가할 것
+
+목표는 각 rolling/expanding test period마다 AP Tree가 어떤 구조를 골랐는지 저장하는 거야.
+
+저장할 정보:
+
+```text
+testing_start_date
+testing_end_date
+ap_tree_max_depth
+ap_tree_min_samples_leaf
+node_id
+depth
+path
+feature_order
+feature_set
+n_stocks
+```
+
+예를 들면:
+
+```text
+path = smb <= 0.42 & hml > 0.61
+feature_order = smb>hml
+feature_set = hml+smb
+```
+
+이렇게 저장하면 나중에 볼 수 있어:
+
+* `smb → hml`이 자주 나오는지
+* `hml → smb`로 순서가 바뀌는지
+* 순서는 바뀌어도 결국 `hml+smb` 조합은 안정적인지
+* test period를 바꾸면 selected region이 크게 달라지는지
+
+---
+
+# 2. `portfolio_construction/ap_tree_portfolios.py`에 추가할 함수
+
+이 파일 맨 아래에 아래 함수를 붙여줘.
+
+```python
+def extract_tree_leaf_rules(tree, feature_names):
+    """
+    Extract human-readable decision rules for each terminal leaf of a fitted
+    sklearn DecisionTreeRegressor.
+
+    Returns one row per leaf.
+    """
+    import pandas as pd
+    from collections import Counter
+
+    sklearn_tree = tree.tree_
+    rows = []
+
+    def walk(node_id, path, depth):
+        left_child = sklearn_tree.children_left[node_id]
+        right_child = sklearn_tree.children_right[node_id]
+
+        is_leaf = left_child == right_child
+
+        if is_leaf:
+            split_features = [step["feature"] for step in path]
+            feature_counts = Counter(split_features)
+
+            row = {
+                "node_id": int(node_id),
+                "depth": int(depth),
+                "path": " & ".join(
+                    [
+                        f'{step["feature"]} {step["direction"]} {step["threshold"]:.6f}'
+                        for step in path
+                    ]
+                ) if path else "root",
+                "feature_order": ">".join(split_features) if split_features else "root",
+                "feature_set": "+".join(sorted(set(split_features))) if split_features else "root",
+                "n_splits": len(split_features),
+                "n_unique_features": len(set(split_features)),
+            }
+
+            for feature, count in feature_counts.items():
+                row[f"count_{feature}"] = int(count)
+
+            rows.append(row)
+            return
+
+        feature = feature_names[sklearn_tree.feature[node_id]]
+        threshold = float(sklearn_tree.threshold[node_id])
+
+        walk(
+            left_child,
+            path + [{"feature": feature, "direction": "<=", "threshold": threshold}],
+            depth + 1,
+        )
+
+        walk(
+            right_child,
+            path + [{"feature": feature, "direction": ">", "threshold": threshold}],
+            depth + 1,
+        )
+
+    walk(0, [], 0)
+
+    return pd.DataFrame(rows)
+```
+
+이 함수는 fitted decision tree를 읽어서 leaf node별로 “어떤 characteristic 순서로 split됐는지”를 뽑아줘.
+
+---
+
+# 3. `implement_experiment_functions.py` 수정
+
+기존 import 부분에서 이 줄을 찾아:
+
+```python
+from portfolio_construction.ap_tree_portfolios import create_ap_tree_sorting
+```
+
+이렇게 바꿔:
+
+```python
+from portfolio_construction.ap_tree_portfolios import (
+    create_ap_tree_sorting,
+    extract_tree_leaf_rules,
+)
+```
+
+그 다음 `test_period(...)` 함수 argument에 아래 두 개를 추가해.
+
+```python
+save_tree_metadata=False,
+tree_metadata_file="results/data/ap_tree_node_metadata.csv",
+```
+
+즉 대략 이렇게:
+
+```python
+def test_period(
+    stock_characteristics,
+    stock_returns,
+    factors_returns,
+    training_start_date,
+    training_end_date,
+    validation_start_date,
+    validation_end_date,
+    testing_start_date,
+    testing_end_date,
+    characteristics,
+    factors,
+    sorting_quantiles,
+    ap_tree_max_depth,
+    ap_tree_min_samples_leaf,
+    save_tree_metadata=False,
+    tree_metadata_file="results/data/ap_tree_node_metadata.csv",
+):
+```
+
+그리고 `test_period(...)` 안에서 두 번째 AP Tree를 fit하는 부분을 찾아. 원래 코드 흐름상 이 부분이 있을 거야:
+
+```python
+tree = DecisionTreeRegressor(max_depth=ap_tree_max_depth, min_samples_leaf=ap_tree_min_samples_leaf)
+tree.fit(X, y)
+ap_tree_groups_returns_training_validation = create_ap_tree_sorting(tree, characteristics_table)
+```
+
+이 사이에 아래 코드를 넣어.
+
+```python
+    if save_tree_metadata:
+        import os
+
+        leaf_rules = extract_tree_leaf_rules(tree, X.columns.tolist())
+
+        leaf_sizes = (
+            characteristics_table
+            .assign(node_id=tree.apply(X))
+            .groupby("node_id")
+            .size()
+            .rename("n_stocks")
+        )
+
+        leaf_rules = (
+            leaf_rules
+            .merge(leaf_sizes, left_on="node_id", right_index=True, how="left")
+            .assign(
+                training_start_date=training_start_date,
+                training_end_date=training_end_date,
+                validation_start_date=validation_start_date,
+                validation_end_date=validation_end_date,
+                testing_start_date=testing_start_date,
+                testing_end_date=testing_end_date,
+                characteristics=",".join(characteristics),
+                factors=",".join(factors),
+                sorting_quantiles=sorting_quantiles,
+                ap_tree_max_depth=ap_tree_max_depth,
+                ap_tree_min_samples_leaf=ap_tree_min_samples_leaf,
+            )
+        )
+
+        os.makedirs(os.path.dirname(tree_metadata_file), exist_ok=True)
+
+        write_header = not os.path.exists(tree_metadata_file)
+
+        leaf_rules.to_csv(
+            tree_metadata_file,
+            mode="a",
+            header=write_header,
+            index=False,
+        )
+```
+
+이제 `test_multiple_periods(...)`에도 같은 argument를 추가해야 해.
+
+기존 함수 정의가 이런 식이면:
+
+```python
+def test_multiple_periods(
+    months_testing_period,
+    characteristics,
+    factors,
+    sorting_quantiles,
+    ap_tree_max_depth,
+    ap_tree_min_samples_leaf,
+    first_testing_start_date=datetime.date(2009, 1, 1),
+    last_testing_end_date=datetime.date(2018, 1, 1),
+):
+```
+
+이렇게 바꿔:
+
+```python
+def test_multiple_periods(
+    months_testing_period,
+    characteristics,
+    factors,
+    sorting_quantiles,
+    ap_tree_max_depth,
+    ap_tree_min_samples_leaf,
+    first_testing_start_date=datetime.date(2009, 1, 1),
+    last_testing_end_date=datetime.date(2018, 1, 1),
+    save_tree_metadata=False,
+    tree_metadata_file="results/data/ap_tree_node_metadata.csv",
+):
+```
+
+그리고 `test_period(...)` 호출 부분에 아래 두 줄 추가:
+
+```python
+save_tree_metadata=save_tree_metadata,
+tree_metadata_file=tree_metadata_file,
+```
+
+즉 이런 형태가 돼야 해:
+
+```python
+new_sml_ap_tree_vs_triple_sorting = test_period(
+    stock_characteristics,
+    stock_returns,
+    factors_returns,
+    training_start_date=stock_returns.index.min(),
+    training_end_date=testing_start_date - relativedelta(years=2, months=1),
+    validation_start_date=testing_start_date - relativedelta(years=2),
+    validation_end_date=testing_start_date - relativedelta(months=1),
+    testing_start_date=testing_start_date,
+    testing_end_date=testing_end_date,
+    characteristics=characteristics,
+    factors=factors,
+    sorting_quantiles=sorting_quantiles,
+    ap_tree_max_depth=ap_tree_max_depth,
+    ap_tree_min_samples_leaf=ap_tree_min_samples_leaf,
+    save_tree_metadata=save_tree_metadata,
+    tree_metadata_file=tree_metadata_file,
+)
+```
+
+---
+
+# 4. `main.py`에서 metadata 저장 켜기
+
+`main.py`에서 기존 `test_multiple_periods(...)` 호출에 아래 argument를 추가하면 돼.
+
+```python
+save_tree_metadata=True,
+tree_metadata_file="results/data/ap_tree_node_metadata.csv",
+```
+
+예를 들어:
+
+```python
+test_multiple_periods(
+    months_testing_period=36,
+    characteristics=['hml', 'smb', 'mom'],
+    factors=['mkt', 'hml', 'smb', 'mom'],
+    sorting_quantiles=3,
+    ap_tree_max_depth=max_depth,
+    ap_tree_min_samples_leaf=min_sample,
+    save_tree_metadata=True,
+    tree_metadata_file="results/data/ap_tree_node_metadata.csv",
+)
+```
+
+README상 이 레포는 `main.py`를 실행해서 여러 time-frame, factor model, characteristic, quantile, tree depth별 결과를 만든다고 되어 있으니까, 이 방식이 레포 구조에 가장 자연스럽게 붙어. ([GitHub][1])
+
+---
+
+# 5. stability 분석용 새 파일 만들기
+
+새 파일을 하나 만들어.
+
+파일명:
+
+```text
+analyze_tree_stability.py
+```
+
+내용:
+
+```python
+import itertools
+from pathlib import Path
+
+import pandas as pd
+
+
+INPUT_FILE = Path("results/data/ap_tree_node_metadata.csv")
+OUTPUT_DIR = Path("results/data/tree_stability")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def jaccard_similarity(set_a, set_b):
+    set_a = set(set_a)
+    set_b = set(set_b)
+
+    if len(set_a | set_b) == 0:
+        return 0.0
+
+    return len(set_a & set_b) / len(set_a | set_b)
+
+
+def main():
+    nodes = pd.read_csv(INPUT_FILE)
+
+    date_cols = [
+        "training_start_date",
+        "training_end_date",
+        "validation_start_date",
+        "validation_end_date",
+        "testing_start_date",
+        "testing_end_date",
+    ]
+
+    for col in date_cols:
+        if col in nodes.columns:
+            nodes[col] = pd.to_datetime(nodes[col])
+
+    nodes["window"] = (
+        nodes["testing_start_date"].dt.strftime("%Y-%m-%d")
+        + "_to_"
+        + nodes["testing_end_date"].dt.strftime("%Y-%m-%d")
+    )
+
+    # ------------------------------------------------------------
+    # 1. Feature frequency
+    # ------------------------------------------------------------
+    feature_rows = []
+
+    for _, row in nodes.iterrows():
+        if row["feature_order"] == "root":
+            continue
+
+        features = str(row["feature_order"]).split(">")
+
+        for depth_position, feature in enumerate(features, start=1):
+            feature_rows.append(
+                {
+                    "window": row["window"],
+                    "testing_start_date": row["testing_start_date"],
+                    "testing_end_date": row["testing_end_date"],
+                    "characteristics": row["characteristics"],
+                    "factors": row["factors"],
+                    "ap_tree_max_depth": row["ap_tree_max_depth"],
+                    "ap_tree_min_samples_leaf": row["ap_tree_min_samples_leaf"],
+                    "node_id": row["node_id"],
+                    "leaf_depth": row["depth"],
+                    "depth_position": depth_position,
+                    "feature": feature,
+                }
+            )
+
+    feature_frequency = pd.DataFrame(feature_rows)
+
+    feature_summary = (
+        feature_frequency
+        .groupby(
+            [
+                "characteristics",
+                "factors",
+                "ap_tree_max_depth",
+                "ap_tree_min_samples_leaf",
+                "feature",
+            ],
+            as_index=False,
+        )
+        .agg(
+            total_uses=("feature", "size"),
+            avg_depth_position=("depth_position", "mean"),
+            n_windows=("window", "nunique"),
+        )
+        .sort_values(
+            [
+                "characteristics",
+                "factors",
+                "ap_tree_max_depth",
+                "total_uses",
+            ],
+            ascending=[True, True, True, False],
+        )
+    )
+
+    feature_frequency.to_csv(OUTPUT_DIR / "feature_frequency_by_window.csv", index=False)
+    feature_summary.to_csv(OUTPUT_DIR / "feature_frequency_summary.csv", index=False)
+
+    # ------------------------------------------------------------
+    # 2. Exact order stability
+    #    Example: smb>hml is different from hml>smb
+    # ------------------------------------------------------------
+    order_summary = (
+        nodes
+        .groupby(
+            [
+                "characteristics",
+                "factors",
+                "ap_tree_max_depth",
+                "ap_tree_min_samples_leaf",
+                "feature_order",
+            ],
+            as_index=False,
+        )
+        .agg(
+            count=("feature_order", "size"),
+            n_windows=("window", "nunique"),
+            avg_leaf_depth=("depth", "mean"),
+            avg_n_stocks=("n_stocks", "mean"),
+        )
+        .sort_values(
+            [
+                "characteristics",
+                "factors",
+                "ap_tree_max_depth",
+                "count",
+            ],
+            ascending=[True, True, True, False],
+        )
+    )
+
+    order_summary.to_csv(OUTPUT_DIR / "feature_order_summary.csv", index=False)
+
+    # ------------------------------------------------------------
+    # 3. Economic region stability ignoring order
+    #    Example: smb>hml and hml>smb both become hml+smb
+    # ------------------------------------------------------------
+    feature_set_summary = (
+        nodes
+        .groupby(
+            [
+                "characteristics",
+                "factors",
+                "ap_tree_max_depth",
+                "ap_tree_min_samples_leaf",
+                "feature_set",
+            ],
+            as_index=False,
+        )
+        .agg(
+            count=("feature_set", "size"),
+            n_windows=("window", "nunique"),
+            avg_leaf_depth=("depth", "mean"),
+            avg_n_stocks=("n_stocks", "mean"),
+        )
+        .sort_values(
+            [
+                "characteristics",
+                "factors",
+                "ap_tree_max_depth",
+                "count",
+            ],
+            ascending=[True, True, True, False],
+        )
+    )
+
+    feature_set_summary.to_csv(OUTPUT_DIR / "feature_set_summary.csv", index=False)
+
+    # ------------------------------------------------------------
+    # 4. Window-to-window Jaccard similarity
+    #    Higher value = more stable selected characteristic regions.
+    # ------------------------------------------------------------
+    group_cols = [
+        "characteristics",
+        "factors",
+        "ap_tree_max_depth",
+        "ap_tree_min_samples_leaf",
+    ]
+
+    similarity_rows = []
+
+    for group_key, group_df in nodes.groupby(group_cols):
+        window_to_orders = group_df.groupby("window")["feature_order"].apply(set).to_dict()
+        window_to_sets = group_df.groupby("window")["feature_set"].apply(set).to_dict()
+
+        windows = sorted(window_to_orders.keys())
+
+        for w1, w2 in itertools.combinations(windows, 2):
+            row = dict(zip(group_cols, group_key))
+            row.update(
+                {
+                    "window_1": w1,
+                    "window_2": w2,
+                    "jaccard_feature_order": jaccard_similarity(
+                        window_to_orders[w1],
+                        window_to_orders[w2],
+                    ),
+                    "jaccard_feature_set": jaccard_similarity(
+                        window_to_sets[w1],
+                        window_to_sets[w2],
+                    ),
+                }
+            )
+            similarity_rows.append(row)
+
+    similarity = pd.DataFrame(similarity_rows)
+    similarity.to_csv(OUTPUT_DIR / "window_jaccard_similarity.csv", index=False)
+
+    # ------------------------------------------------------------
+    # 5. Compact stability report
+    # ------------------------------------------------------------
+    stability_report = (
+        similarity
+        .groupby(group_cols, as_index=False)
+        .agg(
+            avg_jaccard_feature_order=("jaccard_feature_order", "mean"),
+            avg_jaccard_feature_set=("jaccard_feature_set", "mean"),
+            min_jaccard_feature_order=("jaccard_feature_order", "min"),
+            min_jaccard_feature_set=("jaccard_feature_set", "min"),
+        )
+        .sort_values(
+            ["avg_jaccard_feature_set", "avg_jaccard_feature_order"],
+            ascending=False,
+        )
+    )
+
+    stability_report.to_csv(OUTPUT_DIR / "stability_report.csv", index=False)
+
+    print("Saved stability outputs to:", OUTPUT_DIR)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+# 6. 실행 순서
+
+로컬에서 repo 폴더 안에서:
+
+```bash
+python main.py
+python analyze_tree_stability.py
+```
+
+그러면 아래 파일들이 생겨.
+
+```text
+results/data/ap_tree_node_metadata.csv
+results/data/tree_stability/feature_frequency_by_window.csv
+results/data/tree_stability/feature_frequency_summary.csv
+results/data/tree_stability/feature_order_summary.csv
+results/data/tree_stability/feature_set_summary.csv
+results/data/tree_stability/window_jaccard_similarity.csv
+results/data/tree_stability/stability_report.csv
+```
+
+---
+
+# 7. 결과 해석법
+
+## A. `feature_frequency_summary.csv`
+
+이건 characteristic이 얼마나 자주 split에 쓰였는지 보여줘.
+
+예:
+
+```text
+smb  420 times
+hml  315 times
+mom  180 times
+```
+
+해석:
+
+> size-related split이 가장 자주 선택됨.
+
+---
+
+## B. `feature_order_summary.csv`
+
+이건 순서까지 고려해.
+
+예:
+
+```text
+smb>hml
+hml>smb
+smb>mom
+```
+
+해석:
+
+> `smb → hml`과 `hml → smb`가 서로 다르게 계산됨.
+
+네가 말한 질문:
+
+> 기간 바꾸면 size-value가 value-size로 바뀌는가?
+
+이걸 보려면 이 파일 보면 돼.
+
+---
+
+## C. `feature_set_summary.csv`
+
+이건 순서를 무시하고 경제적 조합만 봐.
+
+예:
+
+```text
+hml+smb
+hml+mom+smb
+mom+smb
+```
+
+해석:
+
+> 순서는 바뀌어도 결국 size-value 조합이 안정적으로 선택되는지 볼 수 있음.
+
+---
+
+## D. `stability_report.csv`
+
+여기서 제일 중요한 값은 이거야.
+
+```text
+avg_jaccard_feature_order
+avg_jaccard_feature_set
+```
+
+해석:
+
+* `avg_jaccard_feature_order` 높음
+  → split 순서까지 안정적
+
+* `avg_jaccard_feature_set` 높음
+  → 순서는 바뀌어도 경제적 characteristic 조합은 안정적
+
+* 둘 다 낮음
+  → AP Tree interpretability가 불안정하다는 critique 가능
+
+---
+
+# 8. 발표에서 쓸 수 있는 문장
+
+결과가 안정적이면:
+
+> The selected AP Tree nodes are relatively stable across testing windows, suggesting that the economic interpretation of the selected characteristic regions is robust.
+
+결과가 불안정하면:
+
+> Although AP Trees are more interpretable than black-box ML models, the selected tree structure is sensitive to the sample period. This weakens the claim that AP Trees provide a stable economic interpretation.
+
+특히 두 지표를 같이 보면 좋아.
+
+> If feature-set stability is high but feature-order stability is low, the same economic characteristics matter across periods, but the conditional ordering of splits is unstable.
+
+이건 아주 좋은 발표 포인트야. 즉:
+
+> size와 value 조합은 계속 중요하지만, size 먼저냐 value 먼저냐는 기간에 따라 달라질 수 있다.
+
+---
+
+# 9. 2025년까지 확장하려면
+
+이 레포 README는 `data/stock_characteristics_and_returns.csv`가 있어야 실행된다고 설명해. ([GitHub][1])
+따라서 2025년까지 돌리려면 이 CSV 자체가 2025년까지 포함돼 있어야 해. 코드만 바꾸면 되는 게 아니라, 데이터가 2025년까지 있어야 해.
+
+그다음 `test_multiple_periods(...)` 호출에서 `last_testing_end_date`를 바꿔주면 돼.
+
+예:
+
+```python
+import datetime
+
+test_multiple_periods(
+    months_testing_period=36,
+    characteristics=['hml', 'smb', 'mom'],
+    factors=['mkt', 'hml', 'smb', 'mom'],
+    sorting_quantiles=3,
+    ap_tree_max_depth=max_depth,
+    ap_tree_min_samples_leaf=min_sample,
+    first_testing_start_date=datetime.date(2009, 1, 1),
+    last_testing_end_date=datetime.date(2025, 12, 31),
+    save_tree_metadata=True,
+    tree_metadata_file="results/data/ap_tree_node_metadata.csv",
+)
+```
+
+단, 이 레포의 replication은 원논문과 다르게 final nodes만 쓰는 구조라서, 발표에서는 이렇게 표현하는 게 정확해:
+
+> I test the stability of selected AP Tree leaf regions in the replication code, rather than the full AP pruning procedure of the original paper.
+
+[1]: https://github.com/Fernando-Urbano/forest-through-the-trees "GitHub - Fernando-Urbano/forest-through-the-trees: Data Science Project: Replication of \"Forest Through the Trees: Building Cross-Sections of Stock Returns\" - creation of assets to test validity of factor models with Python · GitHub"
+[2]: https://github.com/Fernando-Urbano/forest-through-the-trees/blob/main/main.py "forest-through-the-trees/main.py at main · Fernando-Urbano/forest-through-the-trees · GitHub"
