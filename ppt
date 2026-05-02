@@ -1,0 +1,247 @@
+---
+
+## Slide 1 — Title
+
+Good afternoon. Today I will present the paper **“Forest through the Trees: Building Cross-Sections of Stock Returns”** by Bryzgalova, Pelger, and Zhu, published in the *Journal of Finance* in 2025.
+
+The paper asks a very fundamental question in empirical asset pricing: **how should we construct test assets?** More specifically, if we have many firm characteristics such as size, value, profitability, investment, and momentum, how can we summarize this information into a small but informative set of portfolios?
+
+---
+
+## Slide 2 — Table of Contents
+
+I will start with the motivation of the paper. Then I will explain the main idea, focusing on test assets and AP Tree pruning. After that, I will summarize the empirical design and the main results. Finally, I will discuss the takeaway, my extension, and some limitations.
+
+---
+
+## Slide 3 — Motivation
+
+The motivation is that asset pricing models often try to explain cross-sectional returns using firm characteristics. For example, small firms may have different expected returns from large firms, value stocks may behave differently from growth stocks, and momentum stocks may have different return patterns.
+
+However, existing approaches have two problems. First, if we keep adding many factors, we may overfit the data. Second, traditional portfolio sorting can be arbitrary and inefficient. For example, if we sort stocks by size and value, we get a size-value cross-section. But why exactly those cutoffs? And what if the important pattern depends on size, value, profitability, and investment together?
+
+So the research question is: **How can we systematically summarize many characteristics into a small set of informative portfolios?**
+
+---
+
+## Slide 4 — Main Idea
+
+The main idea of the paper is to use decision trees to construct portfolios. The authors call these **AP Trees**, or asset-pricing trees.
+
+The purpose is not simply to predict returns. This is important. In many machine learning papers, the goal is to predict next-period stock returns. But here, the goal is different: the authors want to construct **test assets** that better span the stochastic discount factor, or SDF.
+
+In simple terms, the SDF is the object that prices assets. If a set of portfolios spans the SDF well, then it contains important pricing information. So AP Trees are designed to group together firms that are similar in their characteristics, while still producing a small number of portfolios that are useful for asset pricing.
+
+---
+
+## Slide 5 — Test Assets
+
+This slide shows the basic SDF representation. The SDF is written as a linear combination of characteristic-managed portfolios.
+
+The key object here is the managed portfolio return. Each managed portfolio is formed by weighting individual stock returns according to a function of characteristics. So instead of pricing thousands of individual stocks directly, the paper projects stock returns onto characteristic-based portfolios.
+
+This is important because it transforms a conditional problem into an unconditional one. At the individual stock level, expected returns depend on firm characteristics. That is conditional. But once we form managed portfolios based on those characteristics, we can evaluate the resulting portfolio returns using standard unconditional asset pricing tools.
+
+So the intuition is: **use characteristics to form portfolios first, then ask whether these portfolios span the SDF.**
+
+---
+
+## Slide 6 — Interactions among Characteristics
+
+One reason AP Trees are useful is that firm characteristics interact with each other.
+
+For example, size and book-to-market are not independent. Value effects may be stronger among small firms than among large firms. Similarly, investment or profitability may matter differently depending on firm size.
+
+Traditional unconditional sorting has a dimensionality problem. If we sort on five characteristics with five groups each, we would get (5^5) portfolios. With ten characteristics, this becomes impossible because most portfolios would be empty or contain very few stocks.
+
+Trees solve this by using conditional splits. A tree does not need to split on every characteristic at every level. Instead, it asks: conditional on being in this region of the characteristic space, what split is useful next? This allows trees to capture interactions without creating millions of empty portfolios.
+
+---
+
+## Slide 7 — Pruning AP Trees
+
+Of course, if we allow trees to grow freely, they can generate too many portfolios. So the second key step is **pruning**.
+
+AP Trees first generate many possible characteristic-based portfolios. Then AP pruning selects a small subset that best spans the SDF.
+
+The important point is that pruning is not just deleting branches for prediction accuracy. It is a portfolio selection problem. The goal is to choose a sparse set of portfolios that contains the most relevant and nonredundant pricing information.
+
+There is also a bias-variance trade-off. A deeper tree can capture more complex return patterns, but deeper nodes contain fewer stocks, so their returns are noisier. Pruning balances these two forces.
+
+---
+
+## Slide 8 — A Novel Approach in Pruning
+
+This slide summarizes why AP pruning differs from standard decision tree pruning.
+
+First, the authors allow both intermediate and final nodes to be selected. This is important because sometimes a parent node and one child can span the same space as two child nodes. So AP Trees do not always need to keep the most granular portfolios.
+
+Second, they use median characteristic splits and limit tree depth to four. This ensures that each tree region still contains enough stocks.
+
+Third, the pruning is based on a global asset pricing objective, not a local greedy rule. A standard tree may decide not to split a node if the two child nodes have the same average return. But in asset pricing, average returns are not enough. We also care about how portfolios move together. That is, we care about covariance.
+
+So a split can be useful even if the two child portfolios have similar mean returns, as long as they improve the overall Sharpe ratio when combined with other portfolios.
+
+---
+
+## Slide 9 — AP Pruning and Robust Tangency Portfolio
+
+This slide connects AP pruning to the robust tangency portfolio.
+
+The authors show that SDF spanning is equivalent to finding the portfolio with the highest Sharpe ratio in mean-variance space.
+
+The AP pruning procedure has two main parts. First, LASSO selects a sparse set of portfolios by setting many weights to zero. Second, shrinkage is used to make the estimates of means and covariances more robust.
+
+This matters because with many candidate portfolios, sample means and covariance matrices are noisy. Some portfolios may look good purely by chance. Shrinkage reduces the influence of extreme sample estimates, and LASSO prevents the SDF from using too many portfolios.
+
+So the method is not just “run a tree.” It is a robust asset pricing portfolio selection method.
+
+---
+
+## Slide 10 — Methodology
+
+The data come from CRSP and Compustat from 1964 to 2016, with the one-month Treasury bill rate as the risk-free rate.
+
+The authors use ten firm characteristics from the Kenneth French Data Library, including accruals, book-to-market, idiosyncratic volatility, investment, size, long-term reversal, turnover, operating profitability, momentum, and short-term reversal.
+
+For the baseline analysis, they construct 36 cross-sections. Each cross-section uses size plus two other characteristics. Since there are nine other characteristics, this gives (\binom{9}{2}=36) combinations.
+
+For each three-characteristic cross-section, they compare AP Trees with depth four to triple sorts with 32 and 64 portfolios. They also select 40 AP Tree portfolios so that the number of portfolios is comparable to the triple-sort benchmarks.
+
+Finally, they run asset pricing tests using FF3, FF5, XSF, and FF11. XSF is a cross-section-specific factor model: market plus the three long-short factors corresponding to the three characteristics used in that cross-section. FF11 includes the market factor plus all ten long-short characteristic factors.
+
+---
+
+## Slide 11 — Results: Sharpe Ratio
+
+The first main result is that AP Trees achieve much higher out-of-sample Sharpe ratios than triple sorts or conventional long-short factors.
+
+This is important because in this paper, a higher Sharpe ratio means the test assets contain more SDF-relevant pricing information.
+
+The authors also show that cross-section-specific long-short factors achieve only about half of the Sharpe ratios spanned by triple sorts. This means that simple long-short factors miss important cross-sectional information.
+
+Most importantly, the pricing error of the robust SDF is highest for AP Tree portfolios. This means that standard factor models, including FF5, fail to capture the information reflected in AP Tree portfolios. So AP Trees are not just generating high returns; they are generating test assets that are harder for existing models to price.
+
+---
+
+## Slide 12 — Results: Characteristics
+
+The second result is about how many portfolios are needed and why AP Trees perform well.
+
+Surprisingly, using only 10 AP Tree portfolios is enough to retain roughly 90 percent of the Sharpe ratio and alpha of the original 40-portfolio SDF. This supports the authors’ argument that the key question is not “how many portfolios,” but “which portfolios.”
+
+The paper also shows that interactions among characteristics are crucial. When the authors remove interaction nodes and only allow single-characteristic nonlinearities, out-of-sample Sharpe ratios fall to about half of the full AP Tree result.
+
+So the performance of AP Trees comes not only from nonlinear effects of individual characteristics, but also from interactions such as size combined with investment or profitability.
+
+---
+
+## Slide 13 — Results: SDF Objective
+
+This slide explains why AP Trees outperform standard machine learning approaches.
+
+The authors compare AP Trees with V Trees and prediction-based machine learning portfolios. V Trees use the same tree-based candidate portfolios, but they ignore mean information and focus mainly on variance. The machine learning portfolios use deep learning and random forests to predict returns, and then sort stocks into deciles based on predicted returns.
+
+The result is that AP Trees have much larger Sharpe ratios. V Trees and return-prediction portfolios perform poorly relative to AP Trees.
+
+This highlights an important point: **an asset pricing problem requires an asset pricing objective.** Prediction alone is not enough. The goal is not just to predict which stocks will have high returns. The goal is to construct portfolios that span the SDF.
+
+---
+
+## Slide 14 — Results: Summary Statistics
+
+This table summarizes the main quantitative pattern.
+
+AP Trees have higher Sharpe ratios, larger pricing errors, and lower cross-sectional (R^2) than conventional portfolios.
+
+At first, lower (R^2) may sound bad. But here it actually supports the authors’ argument. The lower (R^2) means that conventional factor models have difficulty explaining AP Tree cross-sections.
+
+So AP Trees reveal pricing information that is not captured by standard factor models. Also, the 10-portfolio AP Tree SDF is already very close to the 40-portfolio SDF, which again shows that a small number of carefully selected portfolios can contain most of the relevant information.
+
+---
+
+## Slide 15 — Results: Portfolio Alphas
+
+This slide zooms in on the cross-section based on size, operating profitability, and investment.
+
+The table shows the 10 AP Tree portfolios selected by pruning. Several of them have significant standalone alphas relative to FF3, FF5, XSF, and FF11.
+
+This is important because these portfolios are not simply extreme microcap portfolios. Many are interpretable characteristic regions, such as small caps with low profitability, or small caps with high investment.
+
+The key point is that AP Trees identify specific characteristic interactions that standard factor models fail to price. In contrast, triple sorts often create many small and redundant portfolios. AP Trees select fewer portfolios, but the selected portfolios contain more relevant pricing information.
+
+---
+
+## Slide 16 — Results: Time Variation
+
+The authors also study time variation in SDF weights.
+
+So far, the results assumed fixed SDF weights. In this section, the authors fix the portfolio selection, but estimate the optimal combination of basis assets using a rolling 20-year window.
+
+The result is that allowing time-varying weights improves out-of-sample performance. This makes sense because risk premia can change over time.
+
+Importantly, AP Trees with flexible weights still dominate triple sorts across the full set of characteristics. The authors also use three-fold cross-validation and find that the relative performance of AP Trees is robust to the choice of evaluation period.
+
+---
+
+## Slide 17 — Results: Larger Dimension
+
+The paper also examines a larger-dimensional setting with all ten characteristics.
+
+Instead of directly forming (5^{10}) portfolios, which would be impossible, the authors compare several practical cross-section construction methods.
+
+They consider single-characteristic quintile portfolios, decile portfolios, double sorts with size and one other characteristic, and AP Tree portfolios.
+
+For AP Trees, they combine the selected assets from each of the 36 three-characteristic cross-sections. If they select 10 portfolios per cross-section, that gives 360 assets. If they select 40, that gives 1,440 assets.
+
+The key result is that AP Trees still perform better. This suggests that interactions captured by conditional splits account for a large part of the SDF Sharpe ratio.
+
+---
+
+## Slide 18 — Takeaway
+
+The main takeaway is that AP Trees provide a systematic way to build informative test assets.
+
+They use decision trees to capture nonlinear interactions among characteristics, and then use pruning to select a sparse set of portfolios with nonredundant pricing information.
+
+The paper’s broader implication is that conventional double and triple sorts may be poor reflections of the underlying stock return structure.
+
+So in empirical asset pricing, the important question should not be simply “how many test assets do we have?” Instead, the question should be: **which portfolios actually span the SDF?**
+
+---
+
+## Slide 19 — Extension: Split Order
+
+For my extension, I look at the stability of split order.
+
+The idea was to examine whether AP Trees select stable tree structures across testing windows. I store the node, split, and characteristic combinations for each test period, and compare the selected features using Jaccard similarity.
+
+Using the original dataset, I find mixed but informative results. The exact split order is unstable across testing windows. The average Jaccard similarity for feature order is only 0.24.
+
+However, the feature sets are highly stable. The average Jaccard similarity for unordered feature sets is 0.929. This means that although the exact order of splits changes, the same economic ingredients are repeatedly selected.
+
+In this exercise, momentum, size, and value appear most frequently. My interpretation is that AP Trees should not be read as identifying a fixed causal ordering of characteristics. Instead, they are better understood as adaptively selecting economically meaningful characteristic combinations that help span the SDF.
+
+---
+
+## Slide 20 — Limitations
+
+I will end with several limitations.
+
+First, many significant AP Tree alphas are negative. To exploit negative alphas, an investor may need to short the corresponding portfolio or implement factor-hedged short positions. In practice, short-selling constraints, borrowing costs, transaction costs, and liquidity concerns may make this difficult.
+
+Second, AP Trees are designed for asset pricing, not necessarily for return prediction or direct trading. So the paper should not be interpreted as providing a ready-to-trade strategy.
+
+Third, interpretability is strongest at the level of selected characteristic regions. The exact split order may be sample-sensitive.
+
+Finally, high-order interactions may be under-detected. The pruning and shrinkage procedure favors stable and diversified portfolios, so very small and noisy high-dimensional portfolios may be penalized.
+
+---
+
+## Slide 21 — Thank You
+
+To conclude, the paper makes a strong contribution by shifting attention from factor construction to test asset construction.
+
+AP Trees show that a small number of carefully selected portfolios can reveal pricing information that conventional sorts and standard factor models miss.
+
+Thank you. I am happy to take questions.
