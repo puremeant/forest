@@ -1,0 +1,5 @@
+characteristics,factors,ap_tree_max_depth,ap_tree_min_samples_leaf,feature_set,count,n_windows,avg_leaf_depth,avg_n_stocks
+"hml,smb,mom","mkt,hml,smb,mom",11,5,hml+mom+smb,1314,13,9.292237442922374,6.8873668188736685
+"hml,smb,mom","mkt,hml,smb,mom",11,5,mom+smb,335,13,7.785074626865671,6.501492537313433
+"hml,smb,mom","mkt,hml,smb,mom",11,5,hml+mom,321,13,7.691588785046729,6.629283489096573
+"hml,smb,mom","mkt,hml,smb,mom",11,5,mom,20,11,3.6,8.2

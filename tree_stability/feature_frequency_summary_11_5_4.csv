@@ -1,0 +1,3 @@
+characteristics,factors,ap_tree_max_depth,ap_tree_min_samples_leaf,feature,total_uses,avg_depth_position,n_windows
+"hml,smb","mkt,hml,smb",11,5,hml,7223,4.684757026166412,13
+"hml,smb","mkt,hml,smb",11,5,smb,6080,5.54375,13

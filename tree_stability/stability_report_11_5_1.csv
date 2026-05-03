@@ -1,0 +1,2 @@
+characteristics,factors,ap_tree_max_depth,ap_tree_min_samples_leaf,avg_jaccard_feature_order,avg_jaccard_feature_set,min_jaccard_feature_order,min_jaccard_feature_set
+"hml,smb,mom","mkt,hml,smb,mom",11,5,0.10096392208770076,0.9294871794871795,0.013513513513513514,0.75
