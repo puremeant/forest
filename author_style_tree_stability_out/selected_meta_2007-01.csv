@@ -1,0 +1,11 @@
+column,order_digits,node_code,node_depth,effective_order_digits,effective_order_names,branch_digits,feature_order_label,feature_set_label,path_label,weight,portsN,selection_sr
+1221.1111,1221,1111,3,122,"('LME', 'OP', 'OP')",111,LME>OP>OP,LME+OP,LME:1>OP:1>OP:1,-0.5576925714323022,10,0.6729858161445563
+1311.11111,1311,11111,4,1311,"('LME', 'Investment', 'LME', 'LME')",1111,LME>Investment>LME>LME,Investment+LME,LME:1>Investment:1>LME:1>LME:1,1.0658100539055675,10,0.6729858161445563
+2121.1111,2121,1111,3,212,"('OP', 'LME', 'OP')",111,OP>LME>OP,LME+OP,OP:1>LME:1>OP:1,-0.6943725475069662,10,0.6729858161445563
+2131.1211,2131,1211,3,213,"('OP', 'LME', 'Investment')",211,OP>LME>Investment,Investment+LME+OP,OP:2>LME:1>Investment:1,0.26550769453270456,10,0.6729858161445563
+2221.11111,2221,11111,4,2221,"('OP', 'OP', 'OP', 'LME')",1111,OP>OP>OP>LME,LME+OP,OP:1>OP:1>OP:1>LME:1,-0.43379376880442644,10,0.6729858161445563
+2323.12121,2323,12121,4,2323,"('OP', 'Investment', 'OP', 'Investment')",2121,OP>Investment>OP>Investment,Investment+OP,OP:2>Investment:1>OP:2>Investment:1,0.025002971762158904,10,0.6729858161445563
+3111.11,3111,11,1,3,"('Investment',)",1,Investment,Investment,Investment:1,0.6549172401496344,10,0.6729858161445563
+3111.11111,3111,11111,4,3111,"('Investment', 'LME', 'LME', 'LME')",1111,Investment>LME>LME>LME,Investment+LME,Investment:1>LME:1>LME:1>LME:1,0.7179768932537357,10,0.6729858161445563
+3212.12111,3212,12111,4,3212,"('Investment', 'OP', 'LME', 'OP')",2111,Investment>OP>LME>OP,Investment+LME+OP,Investment:2>OP:1>LME:1>OP:1,-0.3940086167524241,10,0.6729858161445563
+3311.111,3311,111,2,33,"('Investment', 'Investment')",11,Investment>Investment,Investment,Investment:1>Investment:1,0.3506526508923176,10,0.6729858161445563

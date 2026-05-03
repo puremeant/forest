@@ -1,0 +1,11 @@
+column,order_digits,node_code,node_depth,effective_order_digits,effective_order_names,branch_digits,feature_order_label,feature_set_label,path_label,weight,portsN,selection_sr
+1112.11112,1112,11112,4,1112,"('LME', 'LME', 'LME', 'OP')",1112,LME>LME>LME>OP,LME+OP,LME:1>LME:1>LME:1>OP:2,0.07041904093690486,10,0.767882616804848
+1123.11121,1123,11121,4,1123,"('LME', 'LME', 'OP', 'Investment')",1121,LME>LME>OP>Investment,Investment+LME+OP,LME:1>LME:1>OP:2>Investment:1,0.24970686301940306,10,0.767882616804848
+1333.11222,1333,11222,4,1333,"('LME', 'Investment', 'Investment', 'Investment')",1222,LME>Investment>Investment>Investment,Investment+LME,LME:1>Investment:2>Investment:2>Investment:2,-0.32477639596762703,10,0.767882616804848
+2122.11111,2122,11111,4,2122,"('OP', 'LME', 'OP', 'OP')",1111,OP>LME>OP>OP,LME+OP,OP:1>LME:1>OP:1>OP:1,-0.33378046068077744,10,0.767882616804848
+2233.12211,2233,12211,4,2233,"('OP', 'OP', 'Investment', 'Investment')",2211,OP>OP>Investment>Investment,Investment+OP,OP:2>OP:2>Investment:1>Investment:1,0.10238374256850101,10,0.767882616804848
+3111.11111,3111,11111,4,3111,"('Investment', 'LME', 'LME', 'LME')",1111,Investment>LME>LME>LME,Investment+LME,Investment:1>LME:1>LME:1>LME:1,1.3619005090604108,10,0.767882616804848
+3121.1112,3121,1112,3,312,"('Investment', 'LME', 'OP')",112,Investment>LME>OP,Investment+LME+OP,Investment:1>LME:1>OP:2,0.9485661155846361,10,0.767882616804848
+3231.1212,3231,1212,3,323,"('Investment', 'OP', 'Investment')",212,Investment>OP>Investment,Investment+OP,Investment:2>OP:1>Investment:2,-0.4355924305646658,10,0.767882616804848
+3233.11211,3233,11211,4,3233,"('Investment', 'OP', 'Investment', 'Investment')",1211,Investment>OP>Investment>Investment,Investment+OP,Investment:1>OP:2>Investment:1>Investment:1,0.5951757767085843,10,0.767882616804848
+3331.12221,3331,12221,4,3331,"('Investment', 'Investment', 'Investment', 'LME')",2221,Investment>Investment>Investment>LME,Investment+LME,Investment:2>Investment:2>Investment:2>LME:1,-1.23400276066537,10,0.767882616804848
